@@ -1,4 +1,6 @@
 import psutil
+import platform
+import os
 from datetime import datetime
 
 class ProcessMonitor:
@@ -9,7 +11,6 @@ class ProcessMonitor:
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status', 'username', 'io_counters']):
             try:
                 info = proc.info
-                # Convertim io_counters în citiri MB/s pentru a fi mai ușor de înțeles
                 io = info.get('io_counters')
                 info['read_bytes'] = io.read_bytes if io else 0
                 info['write_bytes'] = io.write_bytes if io else 0
@@ -22,7 +23,6 @@ class ProcessMonitor:
     def get_top_cpu(limit=15):
         """Top procese sortate după consumul CPU."""
         procs = ProcessMonitor.get_all_processes()
-        # Primul apel cpu_percent returnează 0 de cele mai multe ori, așa că psutil recomandă un scurt interval sau apeluri multiple
         return sorted(procs, key=lambda x: x['cpu_percent'], reverse=True)[:limit]
 
     @staticmethod
@@ -46,6 +46,16 @@ class ProcessMonitor:
             return False, str(e)
 
     @staticmethod
+    def resume_process(pid):
+        """Reia un proces suspendat."""
+        try:
+            proc = psutil.Process(pid)
+            proc.resume()
+            return True, f"Procesul {pid} a fost reluat."
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
     def get_detailed_info(pid):
         """Obține informații complete despre un proces."""
         try:
@@ -59,7 +69,7 @@ class ProcessMonitor:
                     "username": proc.username(),
                     "create_time": proc.create_time(),
                     "memory_info": proc.memory_info(),
-                    "open_files": [f.path for f in proc.open_files()[:10]], # Primele 10 fișiere
+                    "open_files": [f.path for f in proc.open_files()[:10]],
                     "connections": proc.connections(kind='inet')
                 }
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -67,35 +77,45 @@ class ProcessMonitor:
 
     @staticmethod
     def run_security_audit():
-        """Scanează procesele pentru indicatori de risc."""
+        """Scanează procesele pentru indicatori de risc adaptați la sistemul de operare."""
         risky_procs = []
-        # Eliminăm 'connections' din lista de atribute pentru a evita ValueError
+        system = platform.system()
+        
+        # Definim căile suspecte în funcție de OS
+        risky_paths = []
+        if system == "Linux" or system == "Darwin":
+            risky_paths = ['/tmp', '/var/tmp', '/dev/shm']
+        elif system == "Windows":
+            temp_env = os.environ.get('TEMP', '').lower()
+            tmp_env = os.environ.get('TMP', '').lower()
+            risky_paths = [temp_env, tmp_env, 'c:\\windows\\temp']
+            risky_paths = [p for p in risky_paths if p]
+
         for proc in psutil.process_iter(['pid', 'name', 'exe', 'status', 'username']):
             try:
                 info = proc.info
                 risk_level = 0
                 reasons = []
 
-                # Criteriu 1: Locație suspectă
                 exe_path = info.get('exe')
-                if exe_path and any(p in exe_path for p in ['/tmp', '/var/tmp', '/dev/shm']):
-                    risk_level += 2
-                    reasons.append("⚠️ Rulează din folder temporar (/tmp)")
+                if exe_path:
+                    exe_path_lower = exe_path.lower()
+                    if any(rp in exe_path_lower for rp in risky_paths):
+                        risk_level += 2
+                        reasons.append(f"⚠️ Suspect path: {os.path.dirname(exe_path)}")
 
-                # Criteriu 2: Conexiuni multiple (Apelăm metoda manual)
                 try:
                     conns = proc.connections(kind='inet')
-                    if conns and len(conns) > 5:
+                    if conns and len(conns) > 10:
                         risk_level += 1
-                        reasons.append(f"🌐 Multe conexiuni active ({len(conns)})")
-                        info['audit_connections'] = conns # Salvăm conexiunile pentru detalii
+                        reasons.append(f"🌐 High network activity ({len(conns)} conns)")
+                        info['audit_connections'] = conns
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
 
-                # Criteriu 3: Fără username
-                if not info.get('username'):
+                if (system == "Linux" or system == "Darwin") and not info.get('username'):
                     risk_level += 1
-                    reasons.append("👤 Utilizator necunoscut")
+                    reasons.append("👤 Unknown user")
 
                 if risk_level > 0:
                     info['risk_score'] = risk_level
