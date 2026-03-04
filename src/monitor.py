@@ -46,14 +46,23 @@ class ProcessMonitor:
             return False, str(e)
 
     @staticmethod
-    def get_process_connections(pid):
-        """Obține conexiunile de rețea active pentru un PID."""
+    def get_detailed_info(pid):
+        """Obține informații complete despre un proces."""
         try:
             proc = psutil.Process(pid)
-            connections = proc.connections(kind='inet')
-            return connections
+            with proc.oneshot():
+                return {
+                    "name": proc.name(),
+                    "exe": proc.exe(),
+                    "cmdline": " ".join(proc.cmdline()),
+                    "status": proc.status(),
+                    "username": proc.username(),
+                    "memory_info": proc.memory_info(),
+                    "open_files": [f.path for f in proc.open_files()[:10]], # Primele 10 fișiere
+                    "connections": proc.connections(kind='inet')
+                }
         except (psutil.NoSuchProcess, psutil.AccessDenied):
-            return []
+            return None
 
     @staticmethod
     def run_security_audit():
