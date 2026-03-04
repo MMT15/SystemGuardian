@@ -83,6 +83,14 @@ def main():
     resume_parser = subparsers.add_parser("resume", help="Reia un proces")
     resume_parser.add_argument("pid", type=int, help="PID-ul procesului")
 
+    # Comanda Search
+    search_parser = subparsers.add_parser("search", help="Caută un proces după nume")
+    search_parser.add_argument("query", type=str, help="Numele căutat (ex: chrome)")
+
+    # Comanda Details
+    details_parser = subparsers.add_parser("details", help="Informații detaliate proces")
+    details_parser.add_argument("pid", type=int, help="PID-ul procesului")
+
     args = parser.parse_args()
 
     monitor = ProcessMonitor()
@@ -112,6 +120,38 @@ def main():
                     time.sleep(args.interval)
         except KeyboardInterrupt:
             console.print("\n[bold red]System Guardian oprit.[/bold red]")
+
+    elif args.command == "search":
+        results = monitor.search_processes(args.query)
+        if results:
+            search_table = Table(title=f"Search Results for: '{args.query}'", box=box.DOUBLE)
+            search_table.add_column("PID", style="cyan")
+            search_table.add_column("Name", style="magenta")
+            search_table.add_column("CPU %", justify="right", style="green")
+            search_table.add_column("Memory %", justify="right", style="yellow")
+            search_table.add_column("Status", style="blue")
+            
+            for p in results:
+                search_table.add_row(str(p['pid']), p['name'][:25], f"{p['cpu_percent']:.1f}", f"{p['memory_percent']:.1f}", p['status'])
+            console.print(search_table)
+        else:
+            console.print(f"[red]Niciun proces găsit pentru '{args.query}'.[/red]")
+
+    elif args.command == "details":
+        connections = monitor.get_process_connections(args.pid)
+        
+        detail_lines = []
+        for c in connections:
+            remote = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "*"
+            detail_lines.append(f"🔗 {c.laddr.ip}:{c.laddr.port} -> {remote}")
+
+        detail_panel = Panel(
+            f"[bold cyan]Conexiuni active pentru PID {args.pid}:[/bold cyan]\n\n" +
+            ("\n".join(detail_lines) or "Nicio conexiune activă."),
+            title=f"Network Info: PID {args.pid}",
+            border_style="magenta"
+        )
+        console.print(detail_panel)
 
     elif args.command in ["kill", "suspend", "resume"]:
         func = getattr(monitor, f"{args.command}_process")

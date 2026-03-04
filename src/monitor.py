@@ -41,11 +41,17 @@ class ProcessMonitor:
             return False, str(e)
 
     @staticmethod
-    def resume_process(pid):
-        """Reia un proces suspendat."""
+    def get_process_connections(pid):
+        """Obține conexiunile de rețea active pentru un PID."""
         try:
             proc = psutil.Process(pid)
-            proc.resume()
-            return True, f"Procesul {pid} a fost reluat."
-        except Exception as e:
-            return False, str(e)
+            connections = proc.connections(kind='inet')
+            return connections
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return []
+
+    @staticmethod
+    def search_processes(query):
+        """Caută procese după nume."""
+        procs = ProcessMonitor.get_all_processes()
+        return [p for p in procs if query.lower() in p['name'].lower()]
