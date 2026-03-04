@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import argparse
+import psutil
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
