@@ -3,11 +3,40 @@ import platform
 import os
 import subprocess
 import time
+import requests
 from datetime import datetime
 
 class ProcessMonitor:
     # Cache pentru calculul vitezei (PID -> (last_read, last_write, last_time))
     _net_cache = {}
+    # Cache pentru Geolocation (IP -> {country, flag})
+    _geo_cache = {}
+
+    @staticmethod
+    def get_geo_info(ip):
+        """Obține țara și steagul pentru un IP (cu cache)."""
+        if not ip or ip.startswith(('127.', '192.168.', '10.', '172.')) or ip == '::1':
+            return "Local Network", "🏠"
+        
+        if ip in ProcessMonitor._geo_cache:
+            return ProcessMonitor._geo_cache[ip]
+        
+        try:
+            # Folosim un API public rapid (ip-api.com)
+            response = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,countryCode", timeout=1)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    country = data['country']
+                    # Convertim countryCode în steag Emoji
+                    code = data['countryCode']
+                    flag = chr(ord(code[0]) + 127397) + chr(ord(code[1]) + 127397)
+                    ProcessMonitor._geo_cache[ip] = (country, flag)
+                    return country, flag
+        except:
+            pass
+        
+        return "Unknown", "❓"
 
     @staticmethod
     def get_all_processes():
@@ -45,7 +74,7 @@ class ProcessMonitor:
                 info['upload_speed'] = max(0, upload_speed)
                 
                 processes.append(info)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, ValueError):
                 pass
         
         # Curățăm cache-ul pentru procesele care nu mai există
@@ -96,6 +125,16 @@ class ProcessMonitor:
         try:
             proc = psutil.Process(pid)
             with proc.oneshot():
+                conns = []
+                try:
+                    # Folosim net_connections sau connections în funcție de versiune
+                    if hasattr(proc, 'net_connections'):
+                        conns = proc.net_connections(kind='inet')
+                    else:
+                        conns = proc.connections(kind='inet')
+                except:
+                    pass
+
                 return {
                     "name": proc.name(),
                     "exe": proc.exe(),
@@ -105,7 +144,7 @@ class ProcessMonitor:
                     "create_time": proc.create_time(),
                     "memory_info": proc.memory_info(),
                     "open_files": [f.path for f in proc.open_files()[:10]],
-                    "connections": proc.connections(kind='inet')
+                    "connections": conns
                 }
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return None
@@ -126,7 +165,7 @@ class ProcessMonitor:
             risky_paths = [temp_env, tmp_env, 'c:\\windows\\temp']
             risky_paths = [p for p in risky_paths if p]
 
-        for proc in psutil.process_iter(['pid', 'name', 'exe', 'status', 'username']):
+        for proc in psutil.process_iter(['pid', 'name', 'exe', 'status', 'username', 'net_connections']):
             try:
                 info = proc.info
                 risk_level = 0
@@ -140,12 +179,12 @@ class ProcessMonitor:
                         reasons.append(f"⚠️ Suspect path: {os.path.dirname(exe_path)}")
 
                 try:
-                    conns = proc.connections(kind='inet')
+                    conns = info.get('net_connections')
                     if conns and len(conns) > 10:
                         risk_level += 1
                         reasons.append(f"🌐 High network activity ({len(conns)} conns)")
                         info['audit_connections'] = conns
-                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                except:
                     pass
 
                 if (system == "Linux" or system == "Darwin") and not info.get('username'):
@@ -157,7 +196,7 @@ class ProcessMonitor:
                     info['reasons'] = reasons
                     risky_procs.append(info)
                     
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
                 continue
         
         return sorted(risky_procs, key=lambda x: x['risk_score'], reverse=True)

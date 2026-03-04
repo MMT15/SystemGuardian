@@ -181,11 +181,15 @@ def main():
             else:
                 detail_text += "  (No open files detected or access denied)\n"
 
-            detail_text += "\n\n[bold yellow]🌐 NETWORK CONNECTIONS:[/bold yellow]\n"
+            detail_text += "\n\n[bold yellow]🌐 NETWORK CONNECTIONS & GEOLOCATION:[/bold yellow]\n"
             if info['connections']:
-                for c in info['connections']:
-                    remote = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "*"
-                    detail_text += f"  🔗 {c.laddr.ip}:{c.laddr.port} -> {remote}\n"
+                for c in info['connections'][:15]: # Primele 15
+                    if c.raddr:
+                        country, flag = hw_monitor.get_geo_info(c.raddr.ip) if hasattr(hw_monitor, 'get_geo_info') else monitor.get_geo_info(c.raddr.ip)
+                        remote = f"{c.raddr.ip}:{c.raddr.port} ({flag} {country})"
+                    else:
+                        remote = f"Listening on {c.laddr.ip}:{c.laddr.port}"
+                    detail_text += f"  🔗 {remote}\n"
             else:
                 detail_text += "  (No active network connections)"
 

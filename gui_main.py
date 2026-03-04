@@ -294,8 +294,20 @@ class SystemGuardianGUI(QMainWindow):
         info = self.monitor.get_detailed_info(self.selected_pid)
         if info:
             uptime = time.time() - info['create_time']
-            msg = f"Name: {info['name']}\nUptime: {time.strftime('%Hh %Mm %Ss', time.gmtime(uptime))}\nPath: {info['exe']}"
-            QMessageBox.information(self, "Details", msg)
+            msg = f"Name: {info['name']}\nUptime: {time.strftime('%Hh %Mm %Ss', time.gmtime(uptime))}\nPath: {info['exe']}\n\n"
+            
+            msg += "🌐 Network Connections & Geolocation:\n"
+            if info['connections']:
+                for c in info['connections'][:10]: # Limităm la primele 10 pentru lizibilitate
+                    if c.raddr:
+                        country, flag = self.monitor.get_geo_info(c.raddr.ip)
+                        msg += f"  🔗 {c.raddr.ip}:{c.raddr.port} -> {flag} {country}\n"
+                    else:
+                        msg += f"  🔗 Listening on {c.laddr.ip}:{c.laddr.port}\n"
+            else:
+                msg += "  (No active connections)\n"
+                
+            QMessageBox.information(self, f"Details: PID {self.selected_pid}", msg)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
