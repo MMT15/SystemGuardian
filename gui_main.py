@@ -1,6 +1,7 @@
 import sys
 import time
 import psutil
+import pyqtgraph as pg
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, 
                              QPushButton, QLabel, QProgressBar, QTabWidget, 
@@ -17,11 +18,17 @@ class SystemGuardianGUI(QMainWindow):
         self.hw_monitor = HardwareMonitor()
         self.selected_pid = None 
         self.last_risky_procs = []
+        
+        # Date pentru grafice
+        self.max_points = 60  # Ultimele 60 secunde (aprox)
+        self.cpu_history = [0] * self.max_points
+        self.gpu_history = [0] * self.max_points
+        
         self.init_ui()
 
     def init_ui(self):
         self.setWindowTitle("System Guardian 🛡️")
-        self.resize(1000, 750)
+        self.resize(1100, 850)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -36,9 +43,17 @@ class SystemGuardianGUI(QMainWindow):
         self.cpu_temp_label = QLabel("CPU Temp: --°C")
         self.cpu_bar = QProgressBar()
         self.cpu_bar.setStyleSheet("QProgressBar::chunk { background-color: #4CAF50; }")
+        
+        # CPU Graph
+        self.cpu_graph = pg.PlotWidget(title="CPU Temp History")
+        self.cpu_graph.setBackground('w')
+        self.cpu_graph.setYRange(20, 100)
+        self.cpu_curve = self.cpu_graph.plot(pen=pg.mkPen(color='g', width=2))
+        
         cpu_layout.addWidget(self.cpu_label)
         cpu_layout.addWidget(self.cpu_temp_label)
         cpu_layout.addWidget(self.cpu_bar)
+        cpu_layout.addWidget(self.cpu_graph)
         
         # RAM Info
         ram_layout = QVBoxLayout()
@@ -46,21 +61,29 @@ class SystemGuardianGUI(QMainWindow):
         self.ram_bar = QProgressBar()
         self.ram_bar.setStyleSheet("QProgressBar::chunk { background-color: #2196F3; }")
         ram_layout.addWidget(self.ram_label)
-        ram_layout.addWidget(QLabel("")) # Spacer
         ram_layout.addWidget(self.ram_bar)
+        ram_layout.addStretch()
 
         # GPU Info
         gpu_layout = QVBoxLayout()
         self.gpu_temp_label = QLabel("GPU Temp: --°C")
         self.gpu_temp_bar = QProgressBar()
         self.gpu_temp_bar.setStyleSheet("QProgressBar::chunk { background-color: #FF9800; }")
+        
+        # GPU Graph
+        self.gpu_graph = pg.PlotWidget(title="GPU Temp History")
+        self.gpu_graph.setBackground('w')
+        self.gpu_graph.setYRange(20, 100)
+        self.gpu_curve = self.gpu_graph.plot(pen=pg.mkPen(color='r', width=2))
+        
         gpu_layout.addWidget(QLabel("GPU Hardware"))
         gpu_layout.addWidget(self.gpu_temp_label)
         gpu_layout.addWidget(self.gpu_temp_bar)
+        gpu_layout.addWidget(self.gpu_graph)
 
-        dashboard_layout.addLayout(cpu_layout)
-        dashboard_layout.addLayout(ram_layout)
-        dashboard_layout.addLayout(gpu_layout)
+        dashboard_layout.addLayout(cpu_layout, stretch=2)
+        dashboard_layout.addLayout(ram_layout, stretch=1)
+        dashboard_layout.addLayout(gpu_layout, stretch=2)
         main_layout.addLayout(dashboard_layout)
 
         # Tabs
@@ -79,8 +102,8 @@ class SystemGuardianGUI(QMainWindow):
         monitor_layout.addLayout(search_layout)
         
         self.process_table = QTableWidget()
-        self.process_table.setColumnCount(6)
-        self.process_table.setHorizontalHeaderLabels(["PID", "Name", "CPU %", "RAM %", "Status", "Disk I/O"])
+        self.process_table.setColumnCount(7)
+        self.process_table.setHorizontalHeaderLabels(["PID", "Name", "CPU %", "RAM %", "Status", "Net Speed (D/U)", "Disk I/O"])
         self.process_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.process_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.process_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -147,10 +170,14 @@ class SystemGuardianGUI(QMainWindow):
         self.ram_label.setText(f"RAM Usage: {ram_total}%")
         self.ram_bar.setValue(int(ram_total))
 
-        # Update Temperatures
+        # Update Temperatures and Graphs
         cpu_temp = self.hw_monitor.get_cpu_temp()
         if cpu_temp is not None:
             self.cpu_temp_label.setText(f"CPU Temp: {cpu_temp:.1f}°C")
+            self.cpu_history.append(cpu_temp)
+            self.cpu_history.pop(0)
+            self.cpu_curve.setData(self.cpu_history)
+            
             if cpu_temp > 80:
                 self.cpu_temp_label.setStyleSheet("color: red; font-weight: bold;")
             elif cpu_temp > 65:
@@ -162,6 +189,10 @@ class SystemGuardianGUI(QMainWindow):
         if gpu_temp is not None:
             self.gpu_temp_label.setText(f"GPU Temp: {gpu_temp:.1f}°C")
             self.gpu_temp_bar.setValue(int(gpu_temp))
+            self.gpu_history.append(gpu_temp)
+            self.gpu_history.pop(0)
+            self.gpu_curve.setData(self.gpu_history)
+            
             if gpu_temp > 80:
                 self.gpu_temp_label.setStyleSheet("color: red; font-weight: bold;")
             elif gpu_temp > 65:
@@ -173,29 +204,18 @@ class SystemGuardianGUI(QMainWindow):
             self.gpu_temp_bar.setValue(0)
 
         search_text = self.search_input.text().lower()
+        all_procs = self.monitor.get_all_processes()
+        
         if search_text:
-            all_procs = self.monitor.get_all_processes()
             processes = [p for p in all_procs if search_text in p['name'].lower()]
             processes.sort(key=lambda x: x['cpu_percent'], reverse=True)
         else:
-            processes = self.monitor.get_top_cpu(limit=30)
-
-        if self.selected_pid:
-            if not any(p['pid'] == self.selected_pid for p in processes):
-                try:
-                    p = psutil.Process(self.selected_pid)
-                    with p.oneshot():
-                        io = p.io_counters() if hasattr(p, 'io_counters') else None
-                        processes.append({
-                            'pid': p.pid, 'name': p.name(), 'cpu_percent': p.cpu_percent(),
-                            'memory_percent': p.memory_percent(), 'status': p.status(),
-                            'read_bytes': io.read_bytes if io else 0, 'write_bytes': io.write_bytes if io else 0
-                        })
-                except: self.selected_pid = None
+            processes = sorted(all_procs, key=lambda x: x['cpu_percent'], reverse=True)[:30]
 
         self.process_table.blockSignals(True)
         self.process_table.setRowCount(len(processes))
         new_selected_row = -1
+        
         for row, proc in enumerate(processes):
             pid_val = proc['pid']
             pid_item = QTableWidgetItem(str(pid_val))
@@ -205,11 +225,21 @@ class SystemGuardianGUI(QMainWindow):
             self.process_table.setItem(row, 2, QTableWidgetItem(f"{proc['cpu_percent']:.1f}"))
             self.process_table.setItem(row, 3, QTableWidgetItem(f"{proc['memory_percent']:.1f}"))
             self.process_table.setItem(row, 4, QTableWidgetItem(proc['status']))
+            
+            # Network Speed
+            ds = proc.get('download_speed', 0) / 1024
+            us = proc.get('upload_speed', 0) / 1024
+            net_text = f"↓{ds:.1f} ↑{us:.1f} KB/s"
+            self.process_table.setItem(row, 5, QTableWidgetItem(net_text))
+            
+            # Disk I/O
             rw_mb = f"R: {proc.get('read_bytes', 0)/(1024*1024):.1f} / W: {proc.get('write_bytes', 0)/(1024*1024):.1f}"
-            self.process_table.setItem(row, 5, QTableWidgetItem(rw_mb))
+            self.process_table.setItem(row, 6, QTableWidgetItem(rw_mb))
+            
             if self.selected_pid == pid_val:
                 new_selected_row = row
-                for col in range(6): self.process_table.item(row, col).setBackground(QColor("#e3f2fd"))
+                for col in range(7): self.process_table.item(row, col).setBackground(QColor("#e3f2fd"))
+        
         if new_selected_row >= 0: self.process_table.selectRow(new_selected_row)
         self.process_table.blockSignals(False)
 

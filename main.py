@@ -52,28 +52,30 @@ def get_header():
     )
 
 def get_process_table(monitor, limit=15):
-    processes = monitor.get_top_cpu(limit=limit)
+    processes = sorted(monitor.get_all_processes(), key=lambda x: x['cpu_percent'], reverse=True)[:limit]
     
     table = Table(box=box.SIMPLE)
     table.add_column("PID", style="cyan")
     table.add_column("Name", style="magenta")
     table.add_column("CPU %", justify="right", style="green")
     table.add_column("Memory %", justify="right", style="yellow")
-    table.add_column("Read (MB)", justify="right", style="blue")
-    table.add_column("Write (MB)", justify="right", style="blue")
+    table.add_column("Net (D/U)", justify="right", style="cyan")
+    table.add_column("Disk I/O", justify="right", style="blue")
     table.add_column("Status", style="blue")
 
     for proc in processes:
         read_mb = proc.get('read_bytes', 0) / (1024 * 1024)
         write_mb = proc.get('write_bytes', 0) / (1024 * 1024)
+        ds = proc.get('download_speed', 0) / 1024
+        us = proc.get('upload_speed', 0) / 1024
         
         table.add_row(
             str(proc['pid']),
             proc['name'][:25],
             f"{proc['cpu_percent']:.1f}",
             f"{proc['memory_percent']:.1f}",
-            f"{read_mb:.1f}",
-            f"{write_mb:.1f}",
+            f"↓{ds:.1f} ↑{us:.1f}",
+            f"R:{read_mb:.1f}/W:{write_mb:.1f}",
             proc['status']
         )
     return table

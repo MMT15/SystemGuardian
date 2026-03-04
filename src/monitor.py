@@ -2,22 +2,56 @@ import psutil
 import platform
 import os
 import subprocess
+import time
 from datetime import datetime
 
 class ProcessMonitor:
+    # Cache pentru calculul vitezei (PID -> (last_read, last_write, last_time))
+    _net_cache = {}
+
     @staticmethod
     def get_all_processes():
-        """Obține toate procesele active."""
+        """Obține toate procesele active cu calculul vitezei de rețea."""
         processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status', 'username', 'io_counters']):
+        current_time = time.time()
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status', 'username', 'io_counters', 'net_connections']):
             try:
                 info = proc.info
                 io = info.get('io_counters')
-                info['read_bytes'] = io.read_bytes if io else 0
-                info['write_bytes'] = io.write_bytes if io else 0
+                pid = info['pid']
+                
+                # Inițializare valori de bază
+                read_bytes = io.read_bytes if io else 0
+                write_bytes = io.write_bytes if io else 0
+                
+                # Calcul viteză (Delta Bytes / Delta Time)
+                download_speed = 0
+                upload_speed = 0
+                
+                if pid in ProcessMonitor._net_cache:
+                    last_read, last_write, last_time = ProcessMonitor._net_cache[pid]
+                    time_delta = current_time - last_time
+                    if time_delta > 0:
+                        download_speed = (read_bytes - last_read) / time_delta
+                        upload_speed = (write_bytes - last_write) / time_delta
+                
+                # Update cache
+                ProcessMonitor._net_cache[pid] = (read_bytes, write_bytes, current_time)
+                
+                info['read_bytes'] = read_bytes
+                info['write_bytes'] = write_bytes
+                info['download_speed'] = max(0, download_speed)
+                info['upload_speed'] = max(0, upload_speed)
+                
                 processes.append(info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
+        
+        # Curățăm cache-ul pentru procesele care nu mai există
+        active_pids = {p['pid'] for p in processes}
+        ProcessMonitor._net_cache = {pid: val for pid, val in ProcessMonitor._net_cache.items() if pid in active_pids}
+        
         return processes
 
     @staticmethod
