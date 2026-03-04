@@ -26,9 +26,18 @@ def create_layout():
     return layout
 
 def get_header():
+    cpu_percent = psutil.cpu_percent()
+    mem_percent = psutil.virtual_memory().percent
+    
+    # Culori dinamice în funcție de încărcare
+    cpu_color = "red" if cpu_percent > 80 else "yellow" if cpu_percent > 50 else "green"
+    mem_color = "red" if mem_percent > 80 else "yellow" if mem_percent > 50 else "green"
+
+    header_text = f"[bold cyan]🛡️ SYSTEM GUARDIAN [/bold cyan] | [bold]CPU:[/bold] [{cpu_color}]{cpu_percent}%[/{cpu_color}] | [bold]RAM:[/bold] [{mem_color}]{mem_percent}%[/{mem_color}]"
+    
     return Panel(
-        "[bold cyan]🛡️ SYSTEM GUARDIAN - Advanced Process Monitor[/bold cyan]",
-        style="white on blue",
+        header_text,
+        style="white",
         box=box.ROUNDED
     )
 
