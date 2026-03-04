@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import argparse
+import psutil
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
@@ -146,20 +147,30 @@ def main():
             console.print(f"[red]Niciun proces găsit pentru '{args.query}'.[/red]")
 
     elif args.command == "details":
-        connections = monitor.get_process_connections(args.pid)
-        
-        detail_lines = []
-        for c in connections:
-            remote = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "*"
-            detail_lines.append(f"🔗 {c.laddr.ip}:{c.laddr.port} -> {remote}")
+        info = monitor.get_detailed_info(args.pid)
+        if not info:
+            console.print(f"[bold red]❌ Eroare: Nu s-au putut obține detalii pentru PID {args.pid} (posibil acces respins).[/bold red]")
+        else:
+            detail_text = f"[bold cyan]Name:[/bold cyan] {info['name']}\n"
+            detail_text += f"[bold cyan]Status:[/bold cyan] {info['status']}\n"
+            detail_text += f"[bold cyan]Command:[/bold cyan] {info['cmdline'][:100]}...\n"
+            detail_text += f"[bold cyan]Memory:[/bold cyan] {info['memory_info'].rss / (1024*1024):.1f} MB (RSS)\n\n"
+            
+            detail_text += "[bold yellow]📂 OPEN FILES (First 10):[/bold yellow]\n"
+            if info['open_files']:
+                detail_text += "\n".join([f"  📄 {f}" for f in info['open_files']])
+            else:
+                detail_text += "  (No open files detected or access denied)\n"
 
-        detail_panel = Panel(
-            f"[bold cyan]Conexiuni active pentru PID {args.pid}:[/bold cyan]\n\n" +
-            ("\n".join(detail_lines) or "Nicio conexiune activă."),
-            title=f"Network Info: PID {args.pid}",
-            border_style="magenta"
-        )
-        console.print(detail_panel)
+            detail_text += "\n\n[bold yellow]🌐 NETWORK CONNECTIONS:[/bold yellow]\n"
+            if info['connections']:
+                for c in info['connections']:
+                    remote = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "*"
+                    detail_text += f"  🔗 {c.laddr.ip}:{c.laddr.port} -> {remote}\n"
+            else:
+                detail_text += "  (No active network connections)"
+
+            console.print(Panel(detail_text, title=f"Detaill View: PID {args.pid}", border_style="magenta", expand=False))
 
     elif args.command == "audit":
         risky = monitor.run_security_audit()
