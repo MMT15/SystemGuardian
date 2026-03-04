@@ -15,11 +15,12 @@ class SystemGuardianGUI(QMainWindow):
         super().__init__()
         self.monitor = ProcessMonitor()
         self.selected_pid = None 
+        self.last_risky_procs = []
         self.init_ui()
 
     def init_ui(self):
         self.setWindowTitle("System Guardian 🛡️")
-        self.resize(1000, 700)
+        self.resize(1000, 750)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -47,31 +48,28 @@ class SystemGuardianGUI(QMainWindow):
 
         # Tabs
         self.tabs = QTabWidget()
+        
+        # Monitor Tab
         self.monitor_tab = QWidget()
         monitor_layout = QVBoxLayout(self.monitor_tab)
         
-        # Search
         search_layout = QHBoxLayout()
         search_layout.addWidget(QLabel("🔍 Search:"))
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Filter by name (e.g. brave)...")
+        self.search_input.setPlaceholderText("Filter by name...")
         self.search_input.textChanged.connect(self.update_data)
         search_layout.addWidget(self.search_input)
         monitor_layout.addLayout(search_layout)
         
-        # Table
         self.process_table = QTableWidget()
         self.process_table.setColumnCount(6)
-        self.process_table.setHorizontalHeaderLabels(["PID", "Name", "CPU %", "RAM %", "Status", "Read/Write"])
+        self.process_table.setHorizontalHeaderLabels(["PID", "Name", "CPU %", "RAM %", "Status", "Disk I/O"])
         self.process_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        
         self.process_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.process_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.process_table.itemSelectionChanged.connect(self.on_selection_changed)
-        
         monitor_layout.addWidget(self.process_table)
 
-        # Buttons
         btn_layout = QHBoxLayout()
         self.btn_kill = QPushButton("Kill Process")
         self.btn_kill.setStyleSheet("background-color: #f44336; color: white; padding: 10px; font-weight: bold;")
@@ -85,10 +83,31 @@ class SystemGuardianGUI(QMainWindow):
         btn_layout.addWidget(self.btn_details)
         monitor_layout.addLayout(btn_layout)
 
+        # Security Audit Tab
+        self.audit_tab = QWidget()
+        audit_layout = QVBoxLayout(self.audit_tab)
+        
+        audit_header = QLabel("🛡️ Security Audit Scanner")
+        audit_header.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        audit_layout.addWidget(audit_header)
+        
+        self.audit_table = QTableWidget()
+        self.audit_table.setColumnCount(4)
+        self.audit_table.setHorizontalHeaderLabels(["PID", "Name", "Risk Score", "Reasons"])
+        self.audit_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.audit_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.audit_table.itemDoubleClicked.connect(self.on_audit_item_double_clicked)
+        audit_layout.addWidget(self.audit_table)
+        
+        self.btn_run_audit = QPushButton("🚀 Run Security Scan")
+        self.btn_run_audit.setStyleSheet("background-color: #673AB7; color: white; padding: 15px; font-size: 14px; font-weight: bold;")
+        self.btn_run_audit.clicked.connect(self.handle_run_audit)
+        audit_layout.addWidget(self.btn_run_audit)
+
         self.tabs.addTab(self.monitor_tab, "Monitor")
+        self.tabs.addTab(self.audit_tab, "Security Audit")
         main_layout.addWidget(self.tabs)
 
-        # Timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_data)
         self.timer.start(2000)
@@ -104,7 +123,6 @@ class SystemGuardianGUI(QMainWindow):
                 self.selected_pid = int(pid_item.text())
 
     def update_data(self):
-        # CPU/RAM Update
         cpu_total = psutil.cpu_percent()
         ram_total = psutil.virtual_memory().percent
         self.cpu_label.setText(f"CPU Usage: {cpu_total}%")
@@ -112,7 +130,6 @@ class SystemGuardianGUI(QMainWindow):
         self.ram_label.setText(f"RAM Usage: {ram_total}%")
         self.ram_bar.setValue(int(ram_total))
 
-        # 1. Obținem lista de bază (Top 30 sau Search)
         search_text = self.search_input.text().lower()
         if search_text:
             all_procs = self.monitor.get_all_processes()
@@ -121,68 +138,84 @@ class SystemGuardianGUI(QMainWindow):
         else:
             processes = self.monitor.get_top_cpu(limit=30)
 
-        # 2. LOGICĂ "STICKY": Dacă avem un proces selectat, îl forțăm să rămână în listă
         if self.selected_pid:
-            is_present = any(p['pid'] == self.selected_pid for p in processes)
-            if not is_present:
+            if not any(p['pid'] == self.selected_pid for p in processes):
                 try:
-                    # Încercăm să obținem manual datele procesului selectat
                     p = psutil.Process(self.selected_pid)
                     with p.oneshot():
                         io = p.io_counters() if hasattr(p, 'io_counters') else None
-                        proc_data = {
-                            'pid': p.pid,
-                            'name': p.name(),
-                            'cpu_percent': p.cpu_percent(),
-                            'memory_percent': p.memory_percent(),
-                            'status': p.status(),
-                            'read_bytes': io.read_bytes if io else 0,
-                            'write_bytes': io.write_bytes if io else 0
-                        }
-                        processes.append(proc_data) # Îl adăugăm forțat la final
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    self.selected_pid = None # Procesul a murit, renunțăm la el
+                        processes.append({
+                            'pid': p.pid, 'name': p.name(), 'cpu_percent': p.cpu_percent(),
+                            'memory_percent': p.memory_percent(), 'status': p.status(),
+                            'read_bytes': io.read_bytes if io else 0, 'write_bytes': io.write_bytes if io else 0
+                        })
+                except: self.selected_pid = None
 
-        # Update Tabel
         self.process_table.blockSignals(True)
         self.process_table.setRowCount(len(processes))
-        
         new_selected_row = -1
         for row, proc in enumerate(processes):
             pid_val = proc['pid']
             pid_item = QTableWidgetItem(str(pid_val))
             pid_item.setFlags(pid_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            
             self.process_table.setItem(row, 0, pid_item)
             self.process_table.setItem(row, 1, QTableWidgetItem(proc['name']))
             self.process_table.setItem(row, 2, QTableWidgetItem(f"{proc['cpu_percent']:.1f}"))
             self.process_table.setItem(row, 3, QTableWidgetItem(f"{proc['memory_percent']:.1f}"))
             self.process_table.setItem(row, 4, QTableWidgetItem(proc['status']))
-            
             rw_mb = f"R: {proc.get('read_bytes', 0)/(1024*1024):.1f} / W: {proc.get('write_bytes', 0)/(1024*1024):.1f}"
             self.process_table.setItem(row, 5, QTableWidgetItem(rw_mb))
-
             if self.selected_pid == pid_val:
                 new_selected_row = row
-                # Îl colorăm puțin diferit ca să știm că e "Sticky"
-                for col in range(6):
-                    self.process_table.item(row, col).setBackground(QColor("#e3f2fd"))
-
-        if new_selected_row >= 0:
-            self.process_table.selectRow(new_selected_row)
-        
+                for col in range(6): self.process_table.item(row, col).setBackground(QColor("#e3f2fd"))
+        if new_selected_row >= 0: self.process_table.selectRow(new_selected_row)
         self.process_table.blockSignals(False)
 
+    def handle_run_audit(self):
+        self.btn_run_audit.setText("🔄 Scanning...")
+        self.btn_run_audit.setEnabled(False)
+        QApplication.processEvents()
+        
+        risky_procs = self.monitor.run_security_audit()
+        self.last_risky_procs = risky_procs
+        self.audit_table.setRowCount(len(risky_procs))
+        
+        for row, proc in enumerate(risky_procs):
+            pid_item = QTableWidgetItem(str(proc['pid']))
+            pid_item.setForeground(QColor("red"))
+            self.audit_table.setItem(row, 0, pid_item)
+            self.audit_table.setItem(row, 1, QTableWidgetItem(proc['name']))
+            
+            risk_item = QTableWidgetItem(str(proc['risk_score']))
+            risk_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.audit_table.setItem(row, 2, risk_item)
+            
+            self.audit_table.setItem(row, 3, QTableWidgetItem(", ".join(proc['reasons'])))
+
+        self.btn_run_audit.setText("🚀 Run Security Scan")
+        self.btn_run_audit.setEnabled(True)
+        if not risky_procs:
+            QMessageBox.information(self, "Audit Result", "✅ No risky processes found!")
+
+    def on_audit_item_double_clicked(self, item):
+        row = item.row()
+        pid = int(self.audit_table.item(row, 0).text())
+        proc_info = next((p for p in self.last_risky_procs if p['pid'] == pid), None)
+        
+        if proc_info and 'audit_connections' in proc_info:
+            conns = proc_info['audit_connections']
+            conn_text = "\n".join([f"🔗 {c.laddr.ip}:{c.laddr.port} -> {c.raddr.ip if c.raddr else '*'}:{c.raddr.port if c.raddr else '*'}" for c in conns])
+            QMessageBox.information(self, f"Network for PID {pid}", f"Process: {proc_info['name']}\n\nConnections:\n{conn_text}")
+        else:
+            QMessageBox.information(self, "Info", "Acest proces nu are conexiuni de rețea înregistrate.")
+
     def handle_kill(self):
-        if not self.selected_pid:
-            return
+        if not self.selected_pid: return
         reply = QMessageBox.question(self, 'Confirm', f"Kill PID {self.selected_pid}?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             success, msg = self.monitor.kill_process(self.selected_pid)
-            if success: 
-                self.selected_pid = None
-                self.update_data()
+            if success: self.selected_pid = None; self.update_data()
 
     def handle_details(self):
         if not self.selected_pid: return
