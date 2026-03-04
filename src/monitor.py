@@ -6,9 +6,14 @@ class ProcessMonitor:
     def get_all_processes():
         """Obține toate procesele active."""
         processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status', 'username']):
+        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status', 'username', 'io_counters']):
             try:
-                processes.append(proc.info)
+                info = proc.info
+                # Convertim io_counters în citiri MB/s pentru a fi mai ușor de înțeles
+                io = info.get('io_counters')
+                info['read_bytes'] = io.read_bytes if io else 0
+                info['write_bytes'] = io.write_bytes if io else 0
+                processes.append(info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
         return processes
