@@ -1,0 +1,118 @@
+import os
+import sys
+import time
+import argparse
+from rich.console import Console
+from rich.table import Table
+from rich.live import Live
+from rich.panel import Panel
+from rich.layout import Layout
+from rich import box
+
+from src.monitor import ProcessMonitor
+from src.alerts import AlertSystem
+from src.logger import HistoryLogger
+
+console = Console()
+
+def create_layout():
+    """Creează layout-ul pentru interfața Live."""
+    layout = Layout()
+    layout.split(
+        Layout(name="header", size=3),
+        Layout(name="main", ratio=1),
+        Layout(name="footer", size=5)
+    )
+    return layout
+
+def get_header():
+    return Panel(
+        "[bold cyan]🛡️ SYSTEM GUARDIAN - Advanced Process Monitor[/bold cyan]",
+        style="white on blue",
+        box=box.ROUNDED
+    )
+
+def get_process_table(monitor, limit=15):
+    processes = monitor.get_top_cpu(limit=limit)
+    
+    table = Table(box=box.SIMPLE)
+    table.add_column("PID", style="cyan")
+    table.add_column("Name", style="magenta")
+    table.add_column("CPU %", justify="right", style="green")
+    table.add_column("Memory %", justify="right", style="yellow")
+    table.add_column("Status", style="blue")
+    table.add_column("User", style="white")
+
+    for proc in processes:
+        table.add_row(
+            str(proc['pid']),
+            proc['name'][:25],
+            f"{proc['cpu_percent']:.1f}",
+            f"{proc['memory_percent']:.1f}",
+            proc['status'],
+            proc.get('username', 'N/A')
+        )
+    return table
+
+def main():
+    parser = argparse.ArgumentParser(description="System Guardian - Advanced Process Monitor")
+    subparsers = parser.add_subparsers(dest="command", help="Comenzi disponibile")
+
+    # Comanda Monitor
+    monitor_parser = subparsers.add_parser("monitor", help="Pornește monitorizarea live")
+    monitor_parser.add_argument("--interval", type=int, default=2, help="Update interval (secunde)")
+    monitor_parser.add_argument("--cpu-limit", type=float, default=80.0, help="CPU limită alertă (%)")
+    monitor_parser.add_argument("--mem-limit", type=float, default=80.0, help="Memorie limită alertă (%)")
+
+    # Comenzi de Control
+    kill_parser = subparsers.add_parser("kill", help="Oprește un proces")
+    kill_parser.add_argument("pid", type=int, help="PID-ul procesului")
+
+    suspend_parser = subparsers.add_parser("suspend", help="Suspendă un proces")
+    suspend_parser.add_argument("pid", type=int, help="PID-ul procesului")
+
+    resume_parser = subparsers.add_parser("resume", help="Reia un proces")
+    resume_parser.add_argument("pid", type=int, help="PID-ul procesului")
+
+    args = parser.parse_args()
+
+    monitor = ProcessMonitor()
+
+    if args.command == "monitor":
+        alerts = AlertSystem(cpu_threshold=args.cpu_limit, mem_threshold=args.mem_limit)
+        logger = HistoryLogger()
+        layout = create_layout()
+        layout["header"].update(get_header())
+
+        try:
+            with Live(layout, refresh_per_second=1, screen=True) as live:
+                while True:
+                    # Date proaspete
+                    all_procs = monitor.get_top_cpu(limit=20)
+                    
+                    # Verifică alerte
+                    alerts.check_processes(all_procs)
+                    
+                    # Loghează
+                    logger.log_processes(all_procs)
+
+                    # Update UI
+                    layout["main"].update(Panel(get_process_table(monitor), title="Active Processes", border_style="green"))
+                    layout["footer"].update(Panel(alerts.get_latest_alerts_str(), title="Active Alerts", border_style="red"))
+                    
+                    time.sleep(args.interval)
+        except KeyboardInterrupt:
+            console.print("\n[bold red]System Guardian oprit.[/bold red]")
+
+    elif args.command in ["kill", "suspend", "resume"]:
+        func = getattr(monitor, f"{args.command}_process")
+        success, msg = func(args.pid)
+        if success:
+            console.print(f"[bold green]Succes:[/bold green] {msg}")
+        else:
+            console.print(f"[bold red]Eroare:[/bold red] {msg}")
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()
