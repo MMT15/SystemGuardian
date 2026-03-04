@@ -8,12 +8,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QIcon, QFont, QColor
 
-from src.monitor import ProcessMonitor
+from src.monitor import ProcessMonitor, HardwareMonitor
 
 class SystemGuardianGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.monitor = ProcessMonitor()
+        self.hw_monitor = HardwareMonitor()
         self.selected_pid = None 
         self.last_risky_procs = []
         self.init_ui()
@@ -28,22 +29,38 @@ class SystemGuardianGUI(QMainWindow):
 
         # Dashboard
         dashboard_layout = QHBoxLayout()
+        
+        # CPU Info
         cpu_layout = QVBoxLayout()
         self.cpu_label = QLabel("CPU Usage: 0%")
+        self.cpu_temp_label = QLabel("CPU Temp: --°C")
         self.cpu_bar = QProgressBar()
         self.cpu_bar.setStyleSheet("QProgressBar::chunk { background-color: #4CAF50; }")
         cpu_layout.addWidget(self.cpu_label)
+        cpu_layout.addWidget(self.cpu_temp_label)
         cpu_layout.addWidget(self.cpu_bar)
         
+        # RAM Info
         ram_layout = QVBoxLayout()
         self.ram_label = QLabel("RAM Usage: 0%")
         self.ram_bar = QProgressBar()
         self.ram_bar.setStyleSheet("QProgressBar::chunk { background-color: #2196F3; }")
         ram_layout.addWidget(self.ram_label)
+        ram_layout.addWidget(QLabel("")) # Spacer
         ram_layout.addWidget(self.ram_bar)
+
+        # GPU Info
+        gpu_layout = QVBoxLayout()
+        self.gpu_temp_label = QLabel("GPU Temp: --°C")
+        self.gpu_temp_bar = QProgressBar()
+        self.gpu_temp_bar.setStyleSheet("QProgressBar::chunk { background-color: #FF9800; }")
+        gpu_layout.addWidget(QLabel("GPU Hardware"))
+        gpu_layout.addWidget(self.gpu_temp_label)
+        gpu_layout.addWidget(self.gpu_temp_bar)
 
         dashboard_layout.addLayout(cpu_layout)
         dashboard_layout.addLayout(ram_layout)
+        dashboard_layout.addLayout(gpu_layout)
         main_layout.addLayout(dashboard_layout)
 
         # Tabs
@@ -129,6 +146,31 @@ class SystemGuardianGUI(QMainWindow):
         self.cpu_bar.setValue(int(cpu_total))
         self.ram_label.setText(f"RAM Usage: {ram_total}%")
         self.ram_bar.setValue(int(ram_total))
+
+        # Update Temperatures
+        cpu_temp = self.hw_monitor.get_cpu_temp()
+        if cpu_temp is not None:
+            self.cpu_temp_label.setText(f"CPU Temp: {cpu_temp:.1f}°C")
+            if cpu_temp > 80:
+                self.cpu_temp_label.setStyleSheet("color: red; font-weight: bold;")
+            elif cpu_temp > 65:
+                self.cpu_temp_label.setStyleSheet("color: orange;")
+            else:
+                self.cpu_temp_label.setStyleSheet("")
+        
+        gpu_temp = self.hw_monitor.get_gpu_temp()
+        if gpu_temp is not None:
+            self.gpu_temp_label.setText(f"GPU Temp: {gpu_temp:.1f}°C")
+            self.gpu_temp_bar.setValue(int(gpu_temp))
+            if gpu_temp > 80:
+                self.gpu_temp_label.setStyleSheet("color: red; font-weight: bold;")
+            elif gpu_temp > 65:
+                self.gpu_temp_label.setStyleSheet("color: orange;")
+            else:
+                self.gpu_temp_label.setStyleSheet("")
+        else:
+            self.gpu_temp_label.setText("GPU Temp: N/A")
+            self.gpu_temp_bar.setValue(0)
 
         search_text = self.search_input.text().lower()
         if search_text:

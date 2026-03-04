@@ -1,6 +1,7 @@
 import psutil
 import platform
 import os
+import subprocess
 from datetime import datetime
 
 class ProcessMonitor:
@@ -126,3 +127,35 @@ class ProcessMonitor:
                 continue
         
         return sorted(risky_procs, key=lambda x: x['risk_score'], reverse=True)
+
+class HardwareMonitor:
+    @staticmethod
+    def get_cpu_temp():
+        """Obține temperatura procesorului."""
+        temps = psutil.sensors_temperatures()
+        if not temps:
+            return None
+        
+        # Căutăm 'coretemp' (Intel) sau 'k10temp' (AMD) pe Linux
+        for name in ['coretemp', 'k10temp', 'cpu_thermal', 'soc_thermal']:
+            if name in temps:
+                return temps[name][0].current
+        
+        # Dacă nu găsim nume specifice, returnăm prima valoare disponibilă
+        for name, entries in temps.items():
+            if entries:
+                return entries[0].current
+        return None
+
+    @staticmethod
+    def get_gpu_temp():
+        """Obține temperatura plăcii grafice (NVIDIA)."""
+        try:
+            output = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
+                encoding='utf-8',
+                stderr=subprocess.DEVNULL
+            )
+            return float(output.strip())
+        except Exception:
+            return None

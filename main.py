@@ -10,31 +10,40 @@ from rich.panel import Panel
 from rich.layout import Layout
 from rich import box
 
-from src.monitor import ProcessMonitor
+from src.monitor import ProcessMonitor, HardwareMonitor
 from src.alerts import AlertSystem
 from src.logger import HistoryLogger
 
 console = Console()
+hw_monitor = HardwareMonitor()
 
 def create_layout():
-    """Creează layout-ul pentru interfața Live."""
-    layout = Layout()
-    layout.split(
-        Layout(name="header", size=3),
-        Layout(name="main", ratio=1),
-        Layout(name="footer", size=5)
-    )
+# ... (rest of function)
     return layout
 
 def get_header():
     cpu_percent = psutil.cpu_percent()
     mem_percent = psutil.virtual_memory().percent
     
+    # Get temperatures
+    cpu_temp = hw_monitor.get_cpu_temp()
+    gpu_temp = hw_monitor.get_gpu_temp()
+    
     # Culori dinamice în funcție de încărcare
     cpu_color = "red" if cpu_percent > 80 else "yellow" if cpu_percent > 50 else "green"
     mem_color = "red" if mem_percent > 80 else "yellow" if mem_percent > 50 else "green"
 
-    header_text = f"[bold cyan]🛡️ SYSTEM GUARDIAN [/bold cyan] | [bold]CPU:[/bold] [{cpu_color}]{cpu_percent}%[/{cpu_color}] | [bold]RAM:[/bold] [{mem_color}]{mem_percent}%[/{mem_color}]"
+    header_text = f"[bold cyan]🛡️ SYSTEM GUARDIAN [/bold cyan] | [bold]CPU:[/bold] [{cpu_color}]{cpu_percent}%[/{cpu_color}]"
+    
+    if cpu_temp:
+        temp_color = "red" if cpu_temp > 80 else "yellow" if cpu_temp > 65 else "green"
+        header_text += f" ([{temp_color}]{cpu_temp:.1f}°C[/{temp_color}])"
+        
+    header_text += f" | [bold]RAM:[/bold] [{mem_color}]{mem_percent}%[/{mem_color}]"
+    
+    if gpu_temp:
+        gpu_temp_color = "red" if gpu_temp > 80 else "yellow" if gpu_temp > 65 else "green"
+        header_text += f" | [bold]GPU:[/bold] [{gpu_temp_color}]{gpu_temp:.1f}°C[/{gpu_temp_color}]"
     
     return Panel(
         header_text,
