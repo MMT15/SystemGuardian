@@ -96,6 +96,9 @@ def main():
     details_parser = subparsers.add_parser("details", help="Informații detaliate proces")
     details_parser.add_argument("pid", type=int, help="PID-ul procesului")
 
+    # Comanda Audit
+    audit_parser = subparsers.add_parser("audit", help="Scanează procesele suspecte")
+
     args = parser.parse_args()
 
     monitor = ProcessMonitor()
@@ -157,6 +160,26 @@ def main():
             border_style="magenta"
         )
         console.print(detail_panel)
+
+    elif args.command == "audit":
+        risky = monitor.run_security_audit()
+        if not risky:
+            console.print("[bold green]✅ Scanare completă: Niciun proces suspect găsit.[/bold green]")
+        else:
+            table = Table(title="⚠️ SECURITY AUDIT REPORT", box=box.HEAVY)
+            table.add_column("PID", style="cyan")
+            table.add_column("Name", style="magenta")
+            table.add_column("Risk Score", justify="center", style="bold red")
+            table.add_column("Reasons", style="yellow")
+
+            for p in risky:
+                table.add_row(
+                    str(p['pid']),
+                    p['name'][:25],
+                    str(p['risk_score']),
+                    ", ".join(p['reasons'])
+                )
+            console.print(table)
 
     elif args.command in ["kill", "suspend", "resume"]:
         func = getattr(monitor, f"{args.command}_process")
