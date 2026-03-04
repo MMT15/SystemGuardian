@@ -149,7 +149,16 @@ class HardwareMonitor:
 
     @staticmethod
     def get_gpu_temp():
-        """Obține temperatura plăcii grafice (NVIDIA)."""
+        """Obține temperatura plăcii grafice (Universal: NVIDIA, AMD, Intel)."""
+        # Metoda 1: Încercăm prin psutil (funcționează pentru AMD și unele Intel pe Linux)
+        temps = psutil.sensors_temperatures()
+        if temps:
+            # Căutăm drivere cunoscute
+            for name in ['amdgpu', 'radeon', 'intel_power']:
+                if name in temps and temps[name]:
+                    return temps[name][0].current
+
+        # Metoda 2: Încercăm NVIDIA (nvidia-smi)
         try:
             output = subprocess.check_output(
                 ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
@@ -158,4 +167,17 @@ class HardwareMonitor:
             )
             return float(output.strip())
         except Exception:
-            return None
+            pass
+
+        # Metoda 3: Căutăm în fișierele sistem Linux (Thermal Zones)
+        try:
+            for zone in os.listdir('/sys/class/thermal'):
+                if zone.startswith('thermal_zone'):
+                    with open(f'/sys/class/thermal/{zone}/type', 'r') as f:
+                        if 'gpu' in f.read().lower():
+                            with open(f'/sys/class/thermal/{zone}/temp', 'r') as tf:
+                                return float(tf.read().strip()) / 1000.0
+        except Exception:
+            pass
+            
+        return None
