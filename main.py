@@ -49,17 +49,22 @@ def get_process_table(monitor, limit=15):
     table.add_column("Name", style="magenta")
     table.add_column("CPU %", justify="right", style="green")
     table.add_column("Memory %", justify="right", style="yellow")
+    table.add_column("Read (MB)", justify="right", style="blue")
+    table.add_column("Write (MB)", justify="right", style="blue")
     table.add_column("Status", style="blue")
-    table.add_column("User", style="white")
 
     for proc in processes:
+        read_mb = proc.get('read_bytes', 0) / (1024 * 1024)
+        write_mb = proc.get('write_bytes', 0) / (1024 * 1024)
+        
         table.add_row(
             str(proc['pid']),
             proc['name'][:25],
             f"{proc['cpu_percent']:.1f}",
             f"{proc['memory_percent']:.1f}",
-            proc['status'],
-            proc.get('username', 'N/A')
+            f"{read_mb:.1f}",
+            f"{write_mb:.1f}",
+            proc['status']
         )
     return table
 
