@@ -151,8 +151,16 @@ def main():
         if not info:
             console.print(f"[bold red]❌ Eroare: Nu s-au putut obține detalii pentru PID {args.pid} (posibil acces respins).[/bold red]")
         else:
+            # Calculăm uptime-ul
+            from datetime import datetime
+            uptime_seconds = time.time() - info['create_time']
+            uptime_str = time.strftime('%Hh %Mm %Ss', time.gmtime(uptime_seconds))
+            if uptime_seconds > 86400: # Mai mult de o zi
+                uptime_str = f"{int(uptime_seconds // 86400)}d " + uptime_str
+
             detail_text = f"[bold cyan]Name:[/bold cyan] {info['name']}\n"
             detail_text += f"[bold cyan]Status:[/bold cyan] {info['status']}\n"
+            detail_text += f"[bold cyan]Uptime:[/bold cyan] {uptime_str}\n"
             detail_text += f"[bold cyan]Command:[/bold cyan] {info['cmdline'][:100]}...\n"
             detail_text += f"[bold cyan]Memory:[/bold cyan] {info['memory_info'].rss / (1024*1024):.1f} MB (RSS)\n\n"
             

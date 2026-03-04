@@ -57,6 +57,7 @@ class ProcessMonitor:
                     "cmdline": " ".join(proc.cmdline()),
                     "status": proc.status(),
                     "username": proc.username(),
+                    "create_time": proc.create_time(),
                     "memory_info": proc.memory_info(),
                     "open_files": [f.path for f in proc.open_files()[:10]], # Primele 10 fișiere
                     "connections": proc.connections(kind='inet')
