@@ -56,7 +56,38 @@ class ProcessMonitor:
             return []
 
     @staticmethod
-    def search_processes(query):
-        """Caută procese după nume."""
-        procs = ProcessMonitor.get_all_processes()
-        return [p for p in procs if query.lower() in p['name'].lower()]
+    def run_security_audit():
+        """Scanează procesele pentru indicatori de risc."""
+        risky_procs = []
+        for proc in psutil.process_iter(['pid', 'name', 'exe', 'connections', 'status', 'username']):
+            try:
+                info = proc.info
+                risk_level = 0
+                reasons = []
+
+                # Criteriu 1: Locație suspectă
+                exe_path = info.get('exe')
+                if exe_path and any(p in exe_path for p in ['/tmp', '/var/tmp', '/dev/shm']):
+                    risk_level += 2
+                    reasons.append("⚠️ Rulează din folder temporar (/tmp)")
+
+                # Criteriu 2: Conexiuni multiple
+                conns = info.get('connections')
+                if conns and len(conns) > 5:
+                    risk_level += 1
+                    reasons.append(f"🌐 Multe conexiuni active ({len(conns)})")
+
+                # Criteriu 3: Fără username (pe anumite sisteme)
+                if not info.get('username'):
+                    risk_level += 1
+                    reasons.append("👤 Utilizator necunoscut")
+
+                if risk_level > 0:
+                    info['risk_score'] = risk_level
+                    info['reasons'] = reasons
+                    risky_procs.append(info)
+                    
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        return sorted(risky_procs, key=lambda x: x['risk_score'], reverse=True)
