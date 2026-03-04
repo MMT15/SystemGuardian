@@ -69,7 +69,8 @@ class ProcessMonitor:
     def run_security_audit():
         """Scanează procesele pentru indicatori de risc."""
         risky_procs = []
-        for proc in psutil.process_iter(['pid', 'name', 'exe', 'connections', 'status', 'username']):
+        # Eliminăm 'connections' din lista de atribute pentru a evita ValueError
+        for proc in psutil.process_iter(['pid', 'name', 'exe', 'status', 'username']):
             try:
                 info = proc.info
                 risk_level = 0
@@ -81,13 +82,17 @@ class ProcessMonitor:
                     risk_level += 2
                     reasons.append("⚠️ Rulează din folder temporar (/tmp)")
 
-                # Criteriu 2: Conexiuni multiple
-                conns = info.get('connections')
-                if conns and len(conns) > 5:
-                    risk_level += 1
-                    reasons.append(f"🌐 Multe conexiuni active ({len(conns)})")
+                # Criteriu 2: Conexiuni multiple (Apelăm metoda manual)
+                try:
+                    conns = proc.connections(kind='inet')
+                    if conns and len(conns) > 5:
+                        risk_level += 1
+                        reasons.append(f"🌐 Multe conexiuni active ({len(conns)})")
+                        info['audit_connections'] = conns # Salvăm conexiunile pentru detalii
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    pass
 
-                # Criteriu 3: Fără username (pe anumite sisteme)
+                # Criteriu 3: Fără username
                 if not info.get('username'):
                     risk_level += 1
                     reasons.append("👤 Utilizator necunoscut")
