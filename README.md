@@ -1,79 +1,78 @@
-# System Guardian 🛡️
+# System Guardian
 
-**System Guardian** este un utilitar avansat de monitorizare și gestionare a proceselor pentru sisteme Linux, conceput pentru a oferi o vizibilitate totală asupra resurselor hardware și securității software. Proiectul include atât o interfață grafică (GUI) modernă, cât și o interfață puternică în linia de comandă (CLI).
+**System Guardian** is an advanced process monitoring and management utility for Linux systems, designed to provide full visibility into hardware resources and software security. The project includes both a modern graphical user interface (GUI) and a powerful command line interface (CLI).
 
-## 🚀 Caracteristici Principale
+## Main Features
 
-### 🖥️ Interfață Grafică (GUI) - PyQt6
-- **Real-time Dashboard**: Monitorizare live pentru CPU și RAM cu bare de progres interactive.
-- **Sticky Selection**: Posibilitatea de a "ancora" un proces selectat; acesta rămâne vizibil în tabel chiar dacă nu mai este în Top 30.
-- **Search & Filter**: Filtrare instantanee a proceselor după nume.
-- **One-Click Actions**: Butoane dedicate pentru vizualizarea detaliilor sau oprirea proceselor (Kill).
+### Graphical User Interface (GUI) - PyQt6
+- **Real-time Dashboard**: Live monitoring for CPU and RAM with interactive progress bars.
+- **Sticky Selection**: Ability to "anchor" a selected process; it remains visible in the table even if it is no longer in the Top 30.
+- **Search & Filter**: Instant filtering of processes by name.
+- **One-Click Actions**: Dedicated buttons for viewing details or stopping processes (Kill).
 
-### 💻 Interfață CLI 
-- **Live Monitoring**: Tabel colorat și organizat în terminal cu actualizare automată.
-- **Sub-comenzi Avansate**: `monitor`, `search`, `details`, `audit`, `kill`, `suspend`, `resume`.
+### CLI Interface
+- **Live Monitoring**: Colored and organized table in the terminal with automatic updates.
+- **Advanced Sub-commands**: `monitor`, `search`, `details`, `audit`, `kill`, `suspend`, `resume`.
 
-### 🛡️ Securitate și Diagnoză
-- **Security Audit**: Scanare automată pentru detectarea proceselor suspecte (rulate din `/tmp`, conexiuni multiple, etc.).
-- **Network Activity**: Vizualizarea conexiunilor IP active pentru fiecare proces.
-- **Disk I/O Tracking**: Monitorizarea vitezei de citire și scriere pe disc (MB/s).
-- **File Access**: Listarea fișierelor deschise de un proces (Open Files).
-- **Process Uptime**: Calculul exact al duratei de funcționare a fiecărui proces.
+### Security and Diagnosis
+- **Security Audit**: Automatic scanning to detect suspicious processes (run from `/tmp`, multiple connections, etc.).
+- **Network Activity**: View active IP connections for each process.
+- **Disk I/O Tracking**: Monitoring read and write speeds on disk (MB/s).
+- **File Access**: Listing files opened by a process (Open Files).
+- **Process Uptime**: Exact calculation of the running duration of each process.
 
 ---
 
-## 🛠️ Instalare
+## Installation
 
-### 1. Clonarea repository-ului
+### 1. Cloning the repository
 ```bash
 git clone https://github.com/MMT15/SystemGuardian.git
 cd SystemGuardian
 ```
 
-### 2. Configurarea mediului virtual
+### 2. Virtual environment configuration
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
-*(Dacă nu ai un fișier requirements.txt, instalează manual: `pip install psutil rich PyQt6`)*
+*(If you do not have a requirements.txt file, install manually: `pip install psutil rich PyQt6`)*
 
-### 3. Dependențe Sistem (pentru Linux GUI)
+### 3. System Dependencies (for Linux GUI)
 ```bash
 sudo apt update && sudo apt install libxcb-cursor0
 ```
 
 ---
 
-## 💻 Utilizare
+## Usage
 
-### Pornire GUI (Recomandat)
+### Start GUI (Recommended)
 ```bash
 python gui_main.py
 ```
 
-### Utilizare CLI
-- **Monitorizare Live**: `python main.py monitor`
-- **Audit Securitate**: `python main.py audit`
-- **Detalii Proces**: `python main.py details <PID>`
-- **Căutare**: `python main.py search <nume>`
+### CLI Usage
+- **Live Monitoring**: `python main.py monitor`
+- **Security Audit**: `python main.py audit`
+- **Process Details**: `python main.py details <PID>`
+- **Search**: `python main.py search <name>`
 
 ---
 
-## 🔧 Structura Proiectului
-- `gui_main.py`: Aplicația principală Desktop (PyQt6).
-- `main.py`: Aplicația principală Terminal (Rich).
-- `src/monitor.py`: Core logic - Colectarea datelor prin `psutil`.
-- `src/alerts.py`: Sistemul de praguri și alerte.
-- `src/logger.py`: Logarea istoricului în format CSV.
+## Project Structure
+- `gui_main.py`: Main Desktop application (PyQt6).
+- `main.py`: Main Terminal application (Rich).
+- `src/monitor.py`: Core logic - Data collection via `psutil`.
+- `src/alerts.py`: Thresholds and alerts system.
+- `src/logger.py`: Logging history in CSV format.
 
-## 🎓 Scopul Proiectului
-Creat ca un proiect demonstrativ pentru ingineria sistemelor software, punând accent pe:
-- Programare Orientată pe Obiecte (OOP)
-- Gestionarea resurselor în sisteme de operare
-- Interfețe utilizator moderne (UX/UI)
-- Securitate cibernetică și diagnoză de sistem
+## Project Goal
+Created as a demonstrative project for software systems engineering, emphasizing:
+- Object-Oriented Programming (OOP)
+- Resource management in operating systems
+- Modern user interfaces (UX/UI)
+- Cybersecurity and system diagnosis
 
 ---
-Developed with 🛡️ by [MMT15](https://github.com/MMT15)
